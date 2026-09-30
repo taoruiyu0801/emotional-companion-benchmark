@@ -1,0 +1,912 @@
+原始说明与完整代码
+每个 FILE 段保留全文；L0001 等标记是原文件行号，不属于源代码。
+
+
+===== FILE: README.md =====
+SHA256: d480ff4c38f4be8fd77fe0d4d1f639b4524cf321911d6be321e8fa19635d9712
+L0001 | # 参赛者资料说明
+L0002 | 
+L0003 | 本目录中的资料用于模型训练、推理脚本调试及参赛环境准备，可以提供给参赛者。
+L0004 | 
+L0005 | ## 文件说明
+L0006 | 
+L0007 | - `训练-验证-数据集/`：公开训练集、验证集及对应的数据格式 Schema；
+L0008 | - `participant/`：本地推理脚本、配置文件、依赖文件和提交格式模板；
+L0009 | - `test_inference_data.jsonl`：用于验证推理脚本能否正常运行的样例数据；
+L0010 | - `咪咕仝学平台实例创建demoV1.docx`：咪咕仝学平台实例创建操作说明。
+L0011 | 
+L0012 | ## 快速使用
+L0013 | 
+L0014 | 1. 按操作说明创建咪咕仝学平台实例。
+L0015 | 2. 将模型放入 `participant/model`，并按需修改
+L0016 |    `participant/configs/inference_config.json`。
+L0017 | 3. 安装依赖：
+L0018 | 
+L0019 | ```bash
+L0020 | python3 -m pip install -r /root/participant/requirements.txt
+L0021 | ```
+L0022 | 
+L0023 | 4. 在 `/root` 目录下使用样例数据验证推理脚本：
+L0024 | 
+L0025 | ```bash
+L0026 | bash /root/participant/start.sh /root/test_inference_data.jsonl /root/result
+L0027 | ```
+L0028 | 
+L0029 | 运行完成后，`/root/result` 中应生成 `submission.jsonl` 和
+L0030 | `performance_report.json`。详细配置和运行方式见 `participant/README.md`。
+===== END FILE: README.md =====
+
+
+===== FILE: participant/README.md =====
+SHA256: d0dd0df7e8cceb990aae2a79e3de94994c09c117a21709a99442e9c792a202c7
+L0001 | # 参赛者本地推理工具 v2
+L0002 | 
+L0003 | 本工具支持两种推理后端，推理与计时均在同一次样本遍历中完成：
+L0004 | 
+L0005 | - `transformers`：直接通过 Hugging Face Transformers 加载本地模型；
+L0006 | - `openai_compatible`：调用本地服务的 OpenAI 兼容 `chat/completions` 接口，例如 vLLM
+L0007 |   或 Ollama 的兼容接口。
+L0008 | 
+L0009 | Transformers 模式会根据本地 `config.json` 自动选择纯文本 CausalLM 或图文模型加载器。
+L0010 | 
+L0011 | ## 准备
+L0012 | 
+L0013 | 1. 安装依赖：`python3 -m pip install -r requirements.txt`
+L0014 | 2. 在 `configs/inference_config.json` 中选择 `backend`，并配置模型目录或本地 Base URL。
+L0015 | 3. 正式计时前填写配置中的 `hardware_label`。相对模型路径以本工具目录为基准。
+L0016 | 
+L0017 | ## Transformers 本地目录模式
+L0018 | 
+L0019 | 配置示例：
+L0020 | 
+L0021 | ```json
+L0022 | {
+L0023 |   "backend": "transformers",
+L0024 |   "model_path": "./model"
+L0025 | }
+L0026 | ```
+L0027 | 
+L0028 | ## 统一启动入口
+L0029 | 
+L0030 | 仓库提供了统一入口，它根据 `configs/inference_config.json` 的 `backend` 自动选择流程：
+L0031 | 
+L0032 | - `transformers`：直接通过 Transformers 加载本地模型并运行测试；
+L0033 | - `openai_compatible`：启动 vLLM、等待服务就绪、运行测试，然后自动关闭服务。
+L0034 | 
+L0035 | 执行命令：
+L0036 | 
+L0037 | ```bash
+L0038 | bash start.sh TEST_FILE RESULT_DIR
+L0039 | ```
+L0040 | 
+L0041 | 只需要传入测试文件和结果目录。也可通过 `EVALUATION_BACKEND` 临时覆盖配置文件中的
+L0042 | 后端。vLLM 模式下，模型默认放在 `participant/model`，默认服务地址为
+L0043 | `http://127.0.0.1:8000/v1`，默认服务模型名为模型目录名。
+L0044 | 
+L0045 | 服务配置集中在 `start.sh` 顶部。也可使用 `VLLM_MODEL_DIR`、`VLLM_HOST`、`VLLM_PORT`、
+L0046 | `VLLM_SERVED_MODEL_NAME`、`VLLM_API_KEY` 和 `VLLM_START_TIMEOUT` 覆盖默认值。额外的
+L0047 | vLLM 参数可直接写入顶部的 `VLLM_ARGS` 数组。脚本默认启用 Hugging Face 离线模式；
+L0048 | 完整服务日志会保留在脚本输出的临时日志路径。若需要单独调用已有服务，也可使用以下
+L0049 | 推理配置：
+L0050 | 
+L0051 | ```json
+L0052 | {
+L0053 |   "backend": "openai_compatible",
+L0054 |   "base_url": "http://127.0.0.1:8000/v1",
+L0055 |   "api_model": "local-model",
+L0056 |   "api_key": "",
+L0057 |   "request_timeout_seconds": 600,
+L0058 |   "api_options": {}
+L0059 | }
+L0060 | ```
+L0061 | 
+L0062 | `base_url` 可以填写 API 根地址，也可以直接填写完整的
+L0063 | `http://127.0.0.1:8000/v1/chat/completions`。无需鉴权的本地服务将 `api_key` 留空即可。
+L0064 | `generation.max_new_tokens` 会自动转换为接口参数 `max_tokens`；`api_options` 可用于传递
+L0065 | `response_format` 等服务端扩展参数，但不能覆盖 `model` 和 `messages`。
+L0066 | 
+L0067 | 也可不修改配置文件，使用环境变量切换：
+L0068 | 
+L0069 | ```bash
+L0070 | EVALUATION_BACKEND=openai_compatible \
+L0071 | EVALUATION_BASE_URL=http://127.0.0.1:8000/v1 \
+L0072 | EVALUATION_API_MODEL=local-model \
+L0073 | python3 run_inference.py TEST_FILE RESULT_DIR
+L0074 | ```
+L0075 | 
+L0076 | 可用覆盖变量为 `EVALUATION_BACKEND`、`EVALUATION_BASE_URL`、
+L0077 | `EVALUATION_API_MODEL`、`EVALUATION_API_KEY`、`EVALUATION_MODEL_PATH` 和
+L0078 | `EVALUATION_HARDWARE_LABEL`。API Key 只用于请求头，不会写入结果文件。
+L0079 | 
+L0080 | ## 唯一运行命令
+L0081 | 
+L0082 | ```bash
+L0083 | bash /root/participant/start.sh TEST_FILE RESULT_DIR
+L0084 | ```
+L0085 | 
+L0086 | 主办方只会运行该命令，并传入上述两个位置参数，确保脚本位置无更改：
+L0087 | 
+L0088 | - `TEST_FILE`：具体的待评测 `.jsonl` 文件，例如 `/data/test_public.jsonl`。
+L0089 | - `RESULT_DIR`：结果目录；允许已存在且包含其他文件。本次运行会覆盖其中的
+L0090 |   `submission.jsonl` 和 `performance_report.json`，其他文件保持不变。
+L0091 | 
+L0092 | 固定产物为：
+L0093 | 
+L0094 | - `RESULT_DIR/submission.jsonl`：逐条预测结果；
+L0095 | - `RESULT_DIR/performance_report.json`：同轮端到端耗时及摘要。
+L0096 | 
+L0097 | 脚本会对测试文件中的全部数据推理并生成完整提交，但性能成绩只统计前 100 条数据的
+L0098 | 端到端耗时。
+L0099 | 
+L0100 | 模型 JSON 中某个字段缺失或格式不合规时，脚本不会中断整批推理：文本和情绪字段写为
+L0101 | 空字符串，画像子项和记忆引用写为空数组。空值作为该项预测失败参与评分，不会获得该项
+L0102 | 命中分。模型输出无法解析为 JSON object 时，脚本会尝试提取 `response_text`；若无法
+L0103 | 单独提取，则将去除思考标签和代码围栏后的完整原始输出作为回复文本，其余字段置空并
+L0104 | 继续下一条。失败数量和样本 ID 记录在性能报告中。
+===== END FILE: participant/README.md =====
+
+
+===== FILE: participant/run_inference.py =====
+SHA256: 8d91ecffd58f7c9cd1c46696a74f73db648c88019ad30cd003d4b686d33dfaf9
+L0001 | #!/usr/bin/env python3
+L0002 | """Run local Transformers or OpenAI-compatible inference and timing in one pass.
+L0003 | 
+L0004 | Public CLI contract: python run_inference.py TEST_FILE RESULT_DIR
+L0005 | """
+L0006 | from __future__ import annotations
+L0007 | 
+L0008 | import argparse
+L0009 | import hashlib
+L0010 | import json
+L0011 | import os
+L0012 | import re
+L0013 | import statistics
+L0014 | import time
+L0015 | import urllib.error
+L0016 | import urllib.request
+L0017 | from pathlib import Path
+L0018 | from typing import Any
+L0019 | from urllib.parse import urlparse
+L0020 | 
+L0021 | 
+L0022 | ROOT = Path(__file__).resolve().parent
+L0023 | CONFIG_PATH = ROOT / "configs" / "inference_config.json"
+L0024 | EMOTIONS = {
+L0025 |     "joy", "gratitude", "relaxed", "care", "pride", "neutral", "surprise",
+L0026 |     "mixed", "sadness", "loneliness", "anxiety", "anger", "fear", "disgust",
+L0027 |     "shame", "helplessness",
+L0028 | }
+L0029 | PROFILE_LABELS = {
+L0030 |     "personality_traits": {"extroverted", "introverted", "open", "conservative", "high_conscientiousness", "casual", "agreeable", "assertive", "emotionally_stable", "sensitive"},
+L0031 |     "interests": {"study_exam", "programming_technology", "reading_writing", "film_animation", "music", "games", "sports_fitness", "travel_outdoor", "pets", "social", "career_development", "art_design"},
+L0032 |     "style": {"brief", "detailed", "colloquial", "formal", "direct", "indirect", "humorous", "rational", "high_emotional_expression", "low_emotional_expression", "emoji_user"},
+L0033 | }
+L0034 | MEMORY_RE = re.compile(r"^mem_[0-9]{6}$")
+L0035 | SYSTEM_PROMPT = """你正在参加数字情感陪伴比赛。根据截止到最新用户消息的对话历史，完成下一轮 Assistant 回复预测。
+L0036 | 
+L0037 | 只输出一个 JSON object，不要输出 Markdown 或解释。object 必须且只能包含：
+L0038 | - response_text: 非空中文回复，应自然、贴合上下文和用户偏好；
+L0039 | - emotion_label: 最新用户消息的情绪，只能从 {emotions} 中选择；
+L0040 | - user_profile: object，包含 personality_traits、interests、style 三个字符串数组；
+L0041 | - memory_refs: 固定输出 []，因为测试集没有公开 memory bank。
+L0042 | 
+L0043 | 画像标签只能使用以下枚举；没有充分证据时宁可输出空数组：
+L0044 | personality_traits: {personality}
+L0045 | interests: {interests}
+L0046 | style: {styles}
+L0047 | """
+L0048 | 
+L0049 | 
+L0050 | def parse_args() -> argparse.Namespace:
+L0051 |     parser = argparse.ArgumentParser(description="本地模型单轮推理并计时")
+L0052 |     parser.add_argument("test_file", type=Path, help="具体测试 JSONL 文件")
+L0053 |     parser.add_argument("result_dir", type=Path, help="结果输出目录")
+L0054 |     return parser.parse_args()
+L0055 | 
+L0056 | 
+L0057 | def read_jsonl(path: Path) -> list[dict[str, Any]]:
+L0058 |     rows: list[dict[str, Any]] = []
+L0059 |     with path.open(encoding="utf-8") as handle:
+L0060 |         for number, line in enumerate(handle, 1):
+L0061 |             if not line.strip():
+L0062 |                 continue
+L0063 |             try:
+L0064 |                 row = json.loads(line)
+L0065 |             except json.JSONDecodeError as exc:
+L0066 |                 raise ValueError(f"{path}:{number}: JSON 解析失败: {exc.msg}") from exc
+L0067 |             if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not isinstance(row.get("history"), list):
+L0068 |                 raise ValueError(f"{path}:{number}: 必须包含字符串 id 和数组 history")
+L0069 |             rows.append(row)
+L0070 |     if not rows:
+L0071 |         raise ValueError(f"测试文件为空: {path}")
+L0072 |     if len({row["id"] for row in rows}) != len(rows):
+L0073 |         raise ValueError("测试文件包含重复 id")
+L0074 |     return rows
+L0075 | 
+L0076 | 
+L0077 | def validate_test_file(test_file: Path) -> Path:
+L0078 |     if not test_file.is_file():
+L0079 |         raise ValueError(f"测试文件不存在或不是文件: {test_file}")
+L0080 |     if test_file.suffix.lower() != ".jsonl":
+L0081 |         raise ValueError(f"测试文件必须使用 .jsonl 扩展名: {test_file}")
+L0082 |     return test_file
+L0083 | 
+L0084 | 
+L0085 | def prepare_result_dir(path: Path) -> None:
+L0086 |     if path.exists() and not path.is_dir():
+L0087 |         raise ValueError(f"结果路径已存在但不是目录: {path}")
+L0088 |     path.mkdir(parents=True, exist_ok=True)
+L0089 | 
+L0090 | 
+L0091 | def load_config() -> dict[str, Any]:
+L0092 |     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+L0093 |     environment_overrides = {
+L0094 |         "EVALUATION_BACKEND": "backend",
+L0095 |         "EVALUATION_BASE_URL": "base_url",
+L0096 |         "EVALUATION_API_MODEL": "api_model",
+L0097 |         "EVALUATION_API_KEY": "api_key",
+L0098 |     }
+L0099 |     for environment_name, config_name in environment_overrides.items():
+L0100 |         if environment_name in os.environ and (
+L0101 |             config_name == "api_key" or os.environ[environment_name]
+L0102 |         ):
+L0103 |             config[config_name] = os.environ[environment_name]
+L0104 |     if os.environ.get("EVALUATION_MODEL_PATH"):
+L0105 |         config["model_path"] = os.environ["EVALUATION_MODEL_PATH"]
+L0106 |     if os.environ.get("EVALUATION_HARDWARE_LABEL"):
+L0107 |         config["hardware_label"] = os.environ["EVALUATION_HARDWARE_LABEL"]
+L0108 |     config.setdefault("backend", "transformers")
+L0109 |     required = {"backend", "generation", "performance_rounds", "hardware_label"}
+L0110 |     if not required <= set(config):
+L0111 |         raise ValueError(f"推理配置缺少字段: {sorted(required - set(config))}")
+L0112 |     if config["backend"] not in {"transformers", "openai_compatible"}:
+L0113 |         raise ValueError("backend 必须为 transformers 或 openai_compatible")
+L0114 |     if config["backend"] == "transformers" and not config.get("model_path"):
+L0115 |         raise ValueError("transformers 模式必须配置 model_path")
+L0116 |     if config["backend"] == "openai_compatible":
+L0117 |         missing = [name for name in ("base_url", "api_model") if not config.get(name)]
+L0118 |         if missing:
+L0119 |             raise ValueError(f"openai_compatible 模式缺少字段: {missing}")
+L0120 |         api_endpoint(config["base_url"])
+L0121 |         timeout = config.get("request_timeout_seconds", 600)
+L0122 |         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
+L0123 |             raise ValueError("request_timeout_seconds 必须为正数")
+L0124 |         if not isinstance(config.get("api_options", {}), dict):
+L0125 |             raise ValueError("api_options 必须为 JSON object")
+L0126 |     if not isinstance(config["performance_rounds"], int) or config["performance_rounds"] <= 0:
+L0127 |         raise ValueError("performance_rounds 必须为正整数")
+L0128 |     return config
+L0129 | 
+L0130 | 
+L0131 | def model_path(config: dict[str, Any]) -> Path:
+L0132 |     path = Path(config["model_path"])
+L0133 |     resolved = path if path.is_absolute() else ROOT / path
+L0134 |     if not resolved.exists():
+L0135 |         raise FileNotFoundError(f"本地模型目录不存在: {resolved}")
+L0136 |     return resolved.resolve()
+L0137 | 
+L0138 | 
+L0139 | def api_endpoint(base_url: str) -> str:
+L0140 |     if not isinstance(base_url, str):
+L0141 |         raise ValueError("base_url 必须为字符串")
+L0142 |     normalized = base_url.rstrip("/")
+L0143 |     parsed = urlparse(normalized)
+L0144 |     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+L0145 |         raise ValueError(f"base_url 必须是有效的 HTTP(S) URL: {base_url}")
+L0146 |     if normalized.endswith("/chat/completions"):
+L0147 |         return normalized
+L0148 |     return normalized + "/chat/completions"
+L0149 | 
+L0150 | 
+L0151 | def api_generation_options(generation: dict[str, Any]) -> dict[str, Any]:
+L0152 |     allowed = {
+L0153 |         "temperature", "top_p", "stop", "seed", "frequency_penalty",
+L0154 |         "presence_penalty", "min_p", "top_k",
+L0155 |     }
+L0156 |     options = {name: value for name, value in generation.items() if name in allowed}
+L0157 |     if "max_new_tokens" in generation:
+L0158 |         options["max_tokens"] = generation["max_new_tokens"]
+L0159 |     elif "max_tokens" in generation:
+L0160 |         options["max_tokens"] = generation["max_tokens"]
+L0161 |     if generation.get("do_sample") is False:
+L0162 |         options["temperature"] = 0
+L0163 |     return options
+L0164 | 
+L0165 | 
+L0166 | def response_content(payload: Any) -> str:
+L0167 |     try:
+L0168 |         choice = payload["choices"][0]
+L0169 |         content = choice["message"]["content"]
+L0170 |     except (KeyError, IndexError, TypeError) as exc:
+L0171 |         raise ValueError("API 响应缺少 choices[0].message.content") from exc
+L0172 |     if isinstance(content, str):
+L0173 |         return content
+L0174 |     if isinstance(content, list):
+L0175 |         parts = []
+L0176 |         for item in content:
+L0177 |             if isinstance(item, str):
+L0178 |                 parts.append(item)
+L0179 |             elif isinstance(item, dict) and isinstance(item.get("text"), str):
+L0180 |                 parts.append(item["text"])
+L0181 |         if parts:
+L0182 |             return "".join(parts)
+L0183 |     raise ValueError("API 响应的 message.content 必须为字符串或文本片段数组")
+L0184 | 
+L0185 | 
+L0186 | def request_chat_completion(
+L0187 |     config: dict[str, Any],
+L0188 |     messages: list[dict[str, str]],
+L0189 |     generation: dict[str, Any],
+L0190 | ) -> str:
+L0191 |     reserved = {"model", "messages"}
+L0192 |     api_options = dict(config.get("api_options", {}))
+L0193 |     if reserved & set(api_options):
+L0194 |         raise ValueError(f"api_options 不得覆盖字段: {sorted(reserved & set(api_options))}")
+L0195 |     payload = {
+L0196 |         "model": config["api_model"],
+L0197 |         "messages": messages,
+L0198 |         **api_generation_options(generation),
+L0199 |         **api_options,
+L0200 |     }
+L0201 |     headers = {"Content-Type": "application/json"}
+L0202 |     api_key = config.get("api_key", "")
+L0203 |     if api_key:
+L0204 |         headers["Authorization"] = f"Bearer {api_key}"
+L0205 |     request = urllib.request.Request(
+L0206 |         api_endpoint(config["base_url"]),
+L0207 |         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+L0208 |         headers=headers,
+L0209 |         method="POST",
+L0210 |     )
+L0211 |     try:
+L0212 |         with urllib.request.urlopen(
+L0213 |             request,
+L0214 |             timeout=float(config.get("request_timeout_seconds", 600)),
+L0215 |         ) as response:
+L0216 |             raw_response = response.read().decode("utf-8")
+L0217 |     except urllib.error.HTTPError as exc:
+L0218 |         detail = exc.read().decode("utf-8", errors="replace")[:1000]
+L0219 |         raise RuntimeError(f"API 请求失败: HTTP {exc.code}: {detail}") from exc
+L0220 |     except urllib.error.URLError as exc:
+L0221 |         raise RuntimeError(f"无法连接本地 Base URL: {exc.reason}") from exc
+L0222 |     try:
+L0223 |         return response_content(json.loads(raw_response))
+L0224 |     except json.JSONDecodeError as exc:
+L0225 |         raise ValueError("API 响应不是有效 JSON") from exc
+L0226 | 
+L0227 | 
+L0228 | def conversation_text(sample: dict[str, Any]) -> str:
+L0229 |     rendered = []
+L0230 |     for turn in sample["history"]:
+L0231 |         if not isinstance(turn, dict) or turn.get("role") not in {"user", "assistant"} or not isinstance(turn.get("content"), str):
+L0232 |             raise ValueError(f"样本 {sample['id']} 的 history 格式无效")
+L0233 |         rendered.append(f"{turn['role']}: {turn['content']}")
+L0234 |     return "样本 ID: " + sample["id"] + "\n对话历史:\n" + "\n".join(rendered)
+L0235 | 
+L0236 | 
+L0237 | def extract_object(text: str) -> dict[str, Any]:
+L0238 |     text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+L0239 |     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.S | re.I)
+L0240 |     candidate = fenced.group(1) if fenced else text
+L0241 |     decoder = json.JSONDecoder()
+L0242 |     for match in re.finditer(r"\{", candidate):
+L0243 |         try:
+L0244 |             value, _ = decoder.raw_decode(candidate[match.start():])
+L0245 |         except json.JSONDecodeError:
+L0246 |             continue
+L0247 |         if isinstance(value, dict):
+L0248 |             return value
+L0249 |     raise ValueError("模型输出中没有可解析的 JSON object")
+L0250 | 
+L0251 | 
+L0252 | def recover_response_text(text: str) -> str:
+L0253 |     """Preserve useful model text when its surrounding JSON is malformed."""
+L0254 |     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+L0255 |     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.I).strip()
+L0256 |     match = re.search(
+L0257 |         r'"response_text"\s*:\s*"((?:\\.|[^"\\])*)',
+L0258 |         cleaned,
+L0259 |         flags=re.S,
+L0260 |     )
+L0261 |     if match:
+L0262 |         try:
+L0263 |             recovered = json.loads(f'"{match.group(1)}"')
+L0264 |             if isinstance(recovered, str):
+L0265 |                 return recovered.strip()
+L0266 |         except json.JSONDecodeError:
+L0267 |             pass
+L0268 |     return cleaned
+L0269 | 
+L0270 | 
+L0271 | def normalize_prediction(sample_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+L0272 |     response = raw.get("response_text")
+L0273 |     emotion = raw.get("emotion_label")
+L0274 |     profile = raw.get("user_profile")
+L0275 |     memories = raw.get("memory_refs")
+L0276 |     clean_response = response.strip() if isinstance(response, str) else ""
+L0277 |     clean_emotion = emotion if isinstance(emotion, str) and emotion in EMOTIONS else ""
+L0278 |     profile = profile if isinstance(profile, dict) else {}
+L0279 |     clean_profile: dict[str, list[str]] = {}
+L0280 |     for name, allowed in PROFILE_LABELS.items():
+L0281 |         values = profile.get(name)
+L0282 |         valid = (
+L0283 |             isinstance(values, list)
+L0284 |             and all(isinstance(value, str) for value in values)
+L0285 |             and len(values) == len(set(values))
+L0286 |             and set(values) <= allowed
+L0287 |         )
+L0288 |         clean_profile[name] = values if valid else []
+L0289 |     valid_memories = (
+L0290 |         isinstance(memories, list)
+L0291 |         and all(isinstance(value, str) and MEMORY_RE.fullmatch(value) for value in memories)
+L0292 |         and len(memories) == len(set(memories))
+L0293 |     )
+L0294 |     return {
+L0295 |         "id": sample_id,
+L0296 |         "response_text": clean_response,
+L0297 |         "emotion_label": clean_emotion,
+L0298 |         "user_profile": clean_profile,
+L0299 |         "memory_refs": memories if valid_memories else [],
+L0300 |     }
+L0301 | 
+L0302 | 
+L0303 | def parse_prediction(sample_id: str, decoded: str) -> tuple[dict[str, Any], bool]:
+L0304 |     try:
+L0305 |         raw_prediction = extract_object(decoded)
+L0306 |         parse_failed = False
+L0307 |     except ValueError:
+L0308 |         raw_prediction = {
+L0309 |             "response_text": recover_response_text(decoded),
+L0310 |             "emotion_label": "",
+L0311 |             "user_profile": {},
+L0312 |             "memory_refs": [],
+L0313 |         }
+L0314 |         parse_failed = True
+L0315 |     return normalize_prediction(sample_id, raw_prediction), parse_failed
+L0316 | 
+L0317 | 
+L0318 | def synchronize(torch_module: Any) -> None:
+L0319 |     if torch_module.cuda.is_available():
+L0320 |         torch_module.cuda.synchronize()
+L0321 | 
+L0322 | 
+L0323 | def percentile95(values: list[float]) -> float:
+L0324 |     ordered = sorted(values)
+L0325 |     return ordered[max(0, (95 * len(ordered) + 99) // 100 - 1)]
+L0326 | 
+L0327 | 
+L0328 | def sha256(path: Path) -> str:
+L0329 |     digest = hashlib.sha256()
+L0330 |     with path.open("rb") as handle:
+L0331 |         for block in iter(lambda: handle.read(1024 * 1024), b""):
+L0332 |             digest.update(block)
+L0333 |     return digest.hexdigest()
+L0334 | 
+L0335 | 
+L0336 | def main() -> None:
+L0337 |     args = parse_args()
+L0338 |     test_file = validate_test_file(args.test_file.resolve())
+L0339 |     result_dir = args.result_dir.resolve()
+L0340 |     prepare_result_dir(result_dir)
+L0341 |     config = load_config()
+L0342 |     backend = config["backend"]
+L0343 |     backend_report: dict[str, Any]
+L0344 | 
+L0345 |     if backend == "transformers":
+L0346 |         local_model = model_path(config)
+L0347 |         try:
+L0348 |             import torch
+L0349 |             from transformers import (
+L0350 |                 AutoConfig,
+L0351 |                 AutoModelForCausalLM,
+L0352 |                 AutoModelForImageTextToText,
+L0353 |                 AutoTokenizer,
+L0354 |             )
+L0355 |             from transformers.models.auto.modeling_auto import (
+L0356 |                 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+L0357 |             )
+L0358 |         except ImportError as exc:
+L0359 |             raise RuntimeError("请先安装 participant/requirements.txt") from exc
+L0360 | 
+L0361 |         trust_remote_code = bool(config.get("trust_remote_code", False))
+L0362 |         model_config = AutoConfig.from_pretrained(
+L0363 |             local_model,
+L0364 |             trust_remote_code=trust_remote_code,
+L0365 |             local_files_only=True,
+L0366 |         )
+L0367 |         model_loader = (
+L0368 |             AutoModelForImageTextToText
+L0369 |             if model_config.model_type in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
+L0370 |             else AutoModelForCausalLM
+L0371 |         )
+L0372 |         tokenizer = AutoTokenizer.from_pretrained(local_model, trust_remote_code=trust_remote_code, local_files_only=True)
+L0373 |         model = model_loader.from_pretrained(
+L0374 |             local_model,
+L0375 |             trust_remote_code=trust_remote_code,
+L0376 |             local_files_only=True,
+L0377 |             device_map=config.get("device_map", "auto"),
+L0378 |             torch_dtype=config.get("torch_dtype", "auto"),
+L0379 |         )
+L0380 |         model.eval()
+L0381 |         backend_report = {
+L0382 |             "version": "transformers_inference_v2",
+L0383 |             "timing_scope": "tokenize+generate+decode+parse+validate; model loading excluded",
+L0384 |             "model_path_name": local_model.name,
+L0385 |             "model_type": model_config.model_type,
+L0386 |             "model_loader": model_loader.__name__,
+L0387 |         }
+L0388 |     else:
+L0389 |         backend_report = {
+L0390 |             "version": "openai_compatible_inference_v2",
+L0391 |             "timing_scope": "HTTP request+server inference+response decode+parse+validate; server startup excluded",
+L0392 |             "api_model": config["api_model"],
+L0393 |             "base_url": config["base_url"],
+L0394 |         }
+L0395 | 
+L0396 |     samples = read_jsonl(test_file)
+L0397 |     submission_path = result_dir / "submission.jsonl"
+L0398 |     submission_path.write_text("", encoding="utf-8")
+L0399 |     latencies: list[float] = []
+L0400 |     predictions: list[dict[str, Any]] = []
+L0401 |     parse_failure_ids: list[str] = []
+L0402 |     generation = dict(config["generation"])
+L0403 | 
+L0404 |     system_prompt = SYSTEM_PROMPT.format(
+L0405 |         emotions=", ".join(EMOTIONS),
+L0406 |         personality=", ".join(sorted(PROFILE_LABELS["personality_traits"])),
+L0407 |         interests=", ".join(sorted(PROFILE_LABELS["interests"])),
+L0408 |         styles=", ".join(sorted(PROFILE_LABELS["style"])),
+L0409 |     )
+L0410 | 
+L0411 |     for index, sample in enumerate(samples, 1):
+L0412 |         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": conversation_text(sample)}]
+L0413 |         if backend == "transformers":
+L0414 |             prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+L0415 |             synchronize(torch)
+L0416 |             started = time.perf_counter()
+L0417 |             inputs = tokenizer(prompt, return_tensors="pt")
+L0418 |             input_device = next(model.parameters()).device
+L0419 |             inputs = {name: tensor.to(input_device) for name, tensor in inputs.items()}
+L0420 |             with torch.inference_mode():
+L0421 |                 output_ids = model.generate(**inputs, **generation)
+L0422 |             generated = output_ids[0, inputs["input_ids"].shape[1]:]
+L0423 |             decoded = tokenizer.decode(generated, skip_special_tokens=True)
+L0424 |         else:
+L0425 |             started = time.perf_counter()
+L0426 |             decoded = request_chat_completion(config, messages, generation)
+L0427 |         prediction, parse_failed = parse_prediction(sample["id"], decoded)
+L0428 |         if parse_failed:
+L0429 |             parse_failure_ids.append(sample["id"])
+L0430 |         if backend == "transformers":
+L0431 |             synchronize(torch)
+L0432 |         elapsed_ms = (time.perf_counter() - started) * 1000
+L0433 |         if index <= config["performance_rounds"]:
+L0434 |             latencies.append(elapsed_ms)
+L0435 |         predictions.append(prediction)
+L0436 |         with submission_path.open("a", encoding="utf-8") as handle:
+L0437 |             handle.write(json.dumps(prediction, ensure_ascii=False, separators=(",", ":")) + "\n")
+L0438 |         print(f"[{index}/{len(samples)}] {sample['id']}: {elapsed_ms:.3f} ms", flush=True)
+L0439 | 
+L0440 |     report = {
+L0441 |         **backend_report,
+L0442 |         "backend": backend,
+L0443 |         "complete": len(latencies) == config["performance_rounds"],
+L0444 |         "required_rounds": config["performance_rounds"],
+L0445 |         "rounds": len(latencies),
+L0446 |         "average_latency_ms": round(statistics.fmean(latencies), 6),
+L0447 |         "median_latency_ms": round(statistics.median(latencies), 6),
+L0448 |         "p95_latency_ms": round(percentile95(latencies), 6),
+L0449 |         "min_latency_ms": round(min(latencies), 6),
+L0450 |         "max_latency_ms": round(max(latencies), 6),
+L0451 |         "latencies_ms": [round(value, 6) for value in latencies],
+L0452 |         "hardware_label": config["hardware_label"],
+L0453 |         "test_file_sha256": sha256(test_file),
+L0454 |         "submission_sha256": sha256(submission_path),
+L0455 |         "samples": len(predictions),
+L0456 |         "parse_failure_count": len(parse_failure_ids),
+L0457 |         "parse_failure_ids": parse_failure_ids,
+L0458 |     }
+L0459 |     (result_dir / "performance_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+L0460 |     print(f"PASS: {submission_path}")
+L0461 |     print(f"PASS: {result_dir / 'performance_report.json'}")
+L0462 | 
+L0463 | 
+L0464 | if __name__ == "__main__":
+L0465 |     main()
+===== END FILE: participant/run_inference.py =====
+
+
+===== FILE: participant/start.sh =====
+SHA256: f8ed932171974a8e99214efe5144982938475163a363fb421f2a84f2640e5ff4
+L0001 | #!/usr/bin/env bash
+L0002 | set -euo pipefail
+L0003 | 
+L0004 | # 启动虚拟环境conda_env, 名称固定，不要修改
+L0005 | source activate conda_env
+L0006 | 
+L0007 | SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+L0008 | CONFIG_FILE="$SCRIPT_DIR/configs/inference_config.json"
+L0009 | 
+L0010 | # 服务默认配置；可直接修改，也可用同名环境变量覆盖。
+L0011 | HOST="${VLLM_HOST:-127.0.0.1}"
+L0012 | PORT="${VLLM_PORT:-8000}"
+L0013 | API_KEY="${VLLM_API_KEY:-}"
+L0014 | START_TIMEOUT="${VLLM_START_TIMEOUT:-600}"
+L0015 | PYTHON_CMD="${PYTHON_BIN:-python3}"
+L0016 | VLLM_BIN="${VLLM_BIN:-vllm}"
+L0017 | VLLM_ARGS=(--tensor-parallel-size 2) # 例如：VLLM_ARGS=(--tensor-parallel-size 2)
+L0018 | 
+L0019 | if [[ $# -ne 2 ]]; then
+L0020 |   echo "用法: $0 TEST_FILE RESULT_DIR" >&2
+L0021 |   exit 2
+L0022 | fi
+L0023 | 
+L0024 | TEST_FILE="$1"
+L0025 | RESULT_DIR="$2"
+L0026 | 
+L0027 | [[ -f "$TEST_FILE" && "$TEST_FILE" == *.jsonl ]] || {
+L0028 |   echo "ERROR: TEST_FILE 必须是存在的 .jsonl 文件: $TEST_FILE" >&2
+L0029 |   exit 1
+L0030 | }
+L0031 | if [[ -e "$RESULT_DIR" && ! -d "$RESULT_DIR" ]]; then
+L0032 |   echo "ERROR: RESULT_DIR 已存在但不是目录: $RESULT_DIR" >&2
+L0033 |   exit 1
+L0034 | fi
+L0035 | command -v "$PYTHON_CMD" >/dev/null 2>&1 || {
+L0036 |   echo "ERROR: 找不到 Python 命令: $PYTHON_CMD" >&2
+L0037 |   exit 1
+L0038 | }
+L0039 | 
+L0040 | BACKEND="${EVALUATION_BACKEND:-}"
+L0041 | if [[ -z "$BACKEND" ]]; then
+L0042 |   BACKEND="$("$PYTHON_CMD" -c \
+L0043 |     'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("backend", "transformers"))' \
+L0044 |     "$CONFIG_FILE")"
+L0045 | fi
+L0046 | 
+L0047 | if [[ "$BACKEND" == "transformers" ]]; then
+L0048 |   echo "后端: transformers（直接加载本地模型）"
+L0049 |   export EVALUATION_BACKEND="transformers"
+L0050 |   exec "$PYTHON_CMD" "$SCRIPT_DIR/run_inference.py" "$TEST_FILE" "$RESULT_DIR"
+L0051 | fi
+L0052 | 
+L0053 | if [[ "$BACKEND" != "openai_compatible" ]]; then
+L0054 |   echo "ERROR: backend 必须为 transformers 或 openai_compatible: $BACKEND" >&2
+L0055 |   exit 1
+L0056 | fi
+L0057 | 
+L0058 | CONFIG_MODEL_PATH="$("$PYTHON_CMD" -c \
+L0059 |   'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("model_path", ""))' \
+L0060 |   "$CONFIG_FILE")"
+L0061 | MODEL_DIR="${VLLM_MODEL_DIR:-${EVALUATION_MODEL_PATH:-$CONFIG_MODEL_PATH}}"
+L0062 | if [[ -n "$MODEL_DIR" && "$MODEL_DIR" != /* ]]; then
+L0063 |   MODEL_DIR="$SCRIPT_DIR/$MODEL_DIR"
+L0064 | fi
+L0065 | MODEL_BASENAME="$(basename -- "$MODEL_DIR")"
+L0066 | MODEL_NAME="${VLLM_SERVED_MODEL_NAME:-$MODEL_BASENAME}"
+L0067 | 
+L0068 | [[ -d "$MODEL_DIR" && -f "$MODEL_DIR/config.json" ]] || {
+L0069 |   echo "ERROR: vLLM 模型目录不存在或缺少 config.json: $MODEL_DIR" >&2
+L0070 |   exit 1
+L0071 | }
+L0072 | command -v "$VLLM_BIN" >/dev/null 2>&1 || {
+L0073 |   echo "ERROR: 找不到 vLLM 命令: $VLLM_BIN" >&2
+L0074 |   exit 1
+L0075 | }
+L0076 | [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT >= 1 && PORT <= 65535)) || {
+L0077 |   echo "ERROR: VLLM_PORT 必须是 1 到 65535 之间的整数" >&2
+L0078 |   exit 1
+L0079 | }
+L0080 | [[ "$START_TIMEOUT" =~ ^[0-9]+$ ]] && ((START_TIMEOUT >= 1)) || {
+L0081 |   echo "ERROR: VLLM_START_TIMEOUT 必须为正整数" >&2
+L0082 |   exit 1
+L0083 | }
+L0084 | 
+L0085 | export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+L0086 | export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
+L0087 | export PYTHONUNBUFFERED=1
+L0088 | 
+L0089 | CLIENT_HOST="$HOST"
+L0090 | [[ "$CLIENT_HOST" == "0.0.0.0" || "$CLIENT_HOST" == "::" ]] && CLIENT_HOST="127.0.0.1"
+L0091 | BASE_URL="http://$CLIENT_HOST:$PORT/v1"
+L0092 | HEALTH_URL="http://$CLIENT_HOST:$PORT/health"
+L0093 | LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/competition-vllm.XXXXXX.log")"
+L0094 | 
+L0095 | COMMAND=(
+L0096 |   "$VLLM_BIN" serve "$MODEL_DIR"
+L0097 |   --host "$HOST"
+L0098 |   --port "$PORT"
+L0099 |   --served-model-name "$MODEL_NAME"
+L0100 |   "${VLLM_ARGS[@]}"
+L0101 | )
+L0102 | [[ -n "$API_KEY" ]] && COMMAND+=(--api-key "$API_KEY")
+L0103 | 
+L0104 | VLLM_PID=""
+L0105 | cleanup() {
+L0106 |   if [[ -n "$VLLM_PID" ]] && kill -0 "$VLLM_PID" 2>/dev/null; then
+L0107 |     kill "$VLLM_PID" 2>/dev/null || true
+L0108 |     wait "$VLLM_PID" 2>/dev/null || true
+L0109 |   fi
+L0110 | }
+L0111 | trap cleanup EXIT
+L0112 | trap 'exit 130' INT
+L0113 | trap 'exit 143' TERM
+L0114 | 
+L0115 | echo "启动 vLLM: $MODEL_DIR -> $BASE_URL"
+L0116 | echo "vLLM 日志: $LOG_FILE"
+L0117 | "${COMMAND[@]}" >"$LOG_FILE" 2>&1 &
+L0118 | VLLM_PID=$!
+L0119 | 
+L0120 | READY=0
+L0121 | for ((second = 0; second < START_TIMEOUT; second++)); do
+L0122 |   kill -0 "$VLLM_PID" 2>/dev/null || break
+L0123 |   if "$PYTHON_CMD" -c \
+L0124 |     'import sys, urllib.request; urllib.request.urlopen(sys.argv[1], timeout=2).read()' \
+L0125 |     "$HEALTH_URL" >/dev/null 2>&1; then
+L0126 |     READY=1
+L0127 |     break
+L0128 |   fi
+L0129 |   sleep 1
+L0130 | done
+L0131 | 
+L0132 | if ((READY == 0)); then
+L0133 |   echo "ERROR: vLLM 未能在 ${START_TIMEOUT}s 内就绪" >&2
+L0134 |   tail -n 80 "$LOG_FILE" >&2 || true
+L0135 |   exit 1
+L0136 | fi
+L0137 | 
+L0138 | echo "vLLM 已就绪，开始推理测试"
+L0139 | export EVALUATION_BACKEND="openai_compatible"
+L0140 | export EVALUATION_BASE_URL="$BASE_URL"
+L0141 | export EVALUATION_API_MODEL="$MODEL_NAME"
+L0142 | export EVALUATION_API_KEY="$API_KEY"
+L0143 | export EVALUATION_HARDWARE_LABEL="${EVALUATION_HARDWARE_LABEL:-$(hostname)}"
+L0144 | 
+L0145 | "$PYTHON_CMD" "$SCRIPT_DIR/run_inference.py" "$TEST_FILE" "$RESULT_DIR"
+L0146 | 
+L0147 | echo "测试完成: $RESULT_DIR"
+L0148 | echo "vLLM 日志: $LOG_FILE"
+===== END FILE: participant/start.sh =====
+
+
+===== FILE: participant/requirements.txt =====
+SHA256: f138a3692fc198597db34b45a50a3078a991bcc80a6a2afe8a3c0a2c534297a4
+L0001 | torch>=2.1
+L0002 | transformers>=4.40
+L0003 | accelerate>=0.29
+===== END FILE: participant/requirements.txt =====
+
+
+===== FILE: participant/configs/inference_config.json =====
+SHA256: bfc8fdc4f14d717c2ca06ecf4f84aa61405edc546237c2dead45a89be51b248a
+L0001 | {
+L0002 |   "backend": "transformers",
+L0003 |   "model_path": "./model",
+L0004 |   "trust_remote_code": false,
+L0005 |   "device_map": "auto",
+L0006 |   "torch_dtype": "auto",
+L0007 |   "base_url": "http://127.0.0.1:8000/v1",
+L0008 |   "api_model": "local-model",
+L0009 |   "api_key": "",
+L0010 |   "request_timeout_seconds": 600,
+L0011 |   "api_options": {},
+L0012 |   "generation": {
+L0013 |     "max_new_tokens": 1200,
+L0014 |     "do_sample": false,
+L0015 |     "temperature": 1.0,
+L0016 |     "top_p": 1.0
+L0017 |   },
+L0018 |   "performance_rounds": 100,
+L0019 |   "hardware_label": "fill-in-before-official-run"
+L0020 | }
+===== END FILE: participant/configs/inference_config.json =====
+
+
+===== FILE: participant/templates/submission_schema.json =====
+SHA256: 91c42d56ae433212aab7905eabdbb96cf8463c2f887dc46b3f31647ab3a5d591
+L0001 | {
+L0002 |   "$schema": "https://json-schema.org/draft/2020-12/schema",
+L0003 |   "type": "object",
+L0004 |   "required": ["id", "response_text", "emotion_label", "user_profile", "memory_refs"],
+L0005 |   "additionalProperties": false,
+L0006 |   "properties": {
+L0007 |     "id": {"type": "string", "pattern": "^test_[0-9]{6}_t[0-9]+$"},
+L0008 |     "response_text": {"type": "string"},
+L0009 |     "emotion_label": {"enum": ["", "joy", "gratitude", "relaxed", "care", "pride", "neutral", "surprise", "mixed", "sadness", "loneliness", "anxiety", "anger", "fear", "disgust", "shame", "helplessness"]},
+L0010 |     "user_profile": {
+L0011 |       "type": "object",
+L0012 |       "required": ["personality_traits", "interests", "style"],
+L0013 |       "additionalProperties": false,
+L0014 |       "properties": {
+L0015 |         "personality_traits": {"type": "array", "uniqueItems": true, "items": {"enum": ["extroverted", "introverted", "open", "conservative", "high_conscientiousness", "casual", "agreeable", "assertive", "emotionally_stable", "sensitive"]}},
+L0016 |         "interests": {"type": "array", "uniqueItems": true, "items": {"enum": ["study_exam", "programming_technology", "reading_writing", "film_animation", "music", "games", "sports_fitness", "travel_outdoor", "pets", "social", "career_development", "art_design"]}},
+L0017 |         "style": {"type": "array", "uniqueItems": true, "items": {"enum": ["brief", "detailed", "colloquial", "formal", "direct", "indirect", "humorous", "rational", "high_emotional_expression", "low_emotional_expression", "emoji_user"]}}
+L0018 |       }
+L0019 |     },
+L0020 |     "memory_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^mem_[0-9]{6}$"}}
+L0021 |   }
+L0022 | }
+===== END FILE: participant/templates/submission_schema.json =====
+
+
+===== FILE: participant/templates/submission_template.json =====
+SHA256: d6a630a114ffd91e83fab02deb22a1a7e2bd84266519f45bf775f48a47e31a3c
+L0001 | {
+L0002 |   "id": "test_000001_t1",
+L0003 |   "response_text": "给用户的回复文本",
+L0004 |   "emotion_label": "neutral",
+L0005 |   "user_profile": {
+L0006 |     "personality_traits": [],
+L0007 |     "interests": [],
+L0008 |     "style": []
+L0009 |   },
+L0010 |   "memory_refs": []
+L0011 | }
+===== END FILE: participant/templates/submission_template.json =====
+
+
+===== FILE: 训练-验证-数据集/train/train_public.schema.json =====
+SHA256: a9467e520b06a96859acaa2ff022e395d08ff6ad5e8ae3532a22cc24c630cada
+L0001 | {
+L0002 |   "$schema": "https://json-schema.org/draft/2020-12/schema",
+L0003 |   "type": "object",
+L0004 |   "required": ["conversation_id", "turns", "prediction_points"],
+L0005 |   "additionalProperties": false,
+L0006 |   "properties": {
+L0007 |     "conversation_id": {"type": "string", "pattern": "^train_conv_[0-9]{6}$"},
+L0008 |     "turns": {"$ref": "#/$defs/turns"},
+L0009 |     "prediction_points": {"type": "array", "items": {"$ref": "#/$defs/predictionPoint"}}
+L0010 |   },
+L0011 |   "$defs": {
+L0012 |     "turns": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["turn_id", "role", "content"], "additionalProperties": false, "properties": {"turn_id": {"type": "integer", "minimum": 1}, "role": {"enum": ["user", "assistant"]}, "content": {"type": "string", "minLength": 1}}}},
+L0013 |     "predictionPoint": {"type": "object", "required": ["target_user_turn_id", "assistant_response_turn_id", "target"], "additionalProperties": false, "properties": {"target_user_turn_id": {"type": "integer", "minimum": 1}, "assistant_response_turn_id": {"type": "integer", "minimum": 1}, "target": {"$ref": "#/$defs/target"}}},
+L0014 |     "target": {"type": "object", "required": ["response_text", "emotion_label", "user_profile", "memory_refs"], "additionalProperties": false, "properties": {"response_text": {"type": "string", "minLength": 1}, "emotion_label": {"$ref": "#/$defs/emotion"}, "user_profile": {"$ref": "#/$defs/profile"}, "memory_refs": {"type": "array", "items": {"type": "string", "pattern": "^mem_[0-9]{6}$"}, "uniqueItems": true}}},
+L0015 |     "emotion": {"enum": ["joy", "gratitude", "relaxed", "care", "pride", "neutral", "surprise", "mixed", "sadness", "loneliness", "anxiety", "anger", "fear", "disgust", "shame", "helplessness"]},
+L0016 |     "profile": {"type": "object", "required": ["personality_traits", "interests", "style"], "additionalProperties": false, "properties": {"personality_traits": {"type": "array", "items": {"enum": ["extroverted", "introverted", "open", "conservative", "high_conscientiousness", "casual", "agreeable", "assertive", "emotionally_stable", "sensitive"]}, "uniqueItems": true}, "interests": {"type": "array", "items": {"enum": ["study_exam", "programming_technology", "reading_writing", "film_animation", "music", "games", "sports_fitness", "travel_outdoor", "pets", "social", "career_development", "art_design"]}, "uniqueItems": true}, "style": {"type": "array", "items": {"enum": ["brief", "detailed", "colloquial", "formal", "direct", "indirect", "humorous", "rational", "high_emotional_expression", "low_emotional_expression", "emoji_user"]}, "uniqueItems": true}}}
+L0017 |   }
+L0018 | }
+===== END FILE: 训练-验证-数据集/train/train_public.schema.json =====
+
+
+===== FILE: 训练-验证-数据集/val/val_public.schema.json =====
+SHA256: 4b995d80aba99883bda63e2fa18b161a2784e501f98316295f4618b0a0c4af10
+L0001 | {
+L0002 |   "$schema": "https://json-schema.org/draft/2020-12/schema",
+L0003 |   "type": "object",
+L0004 |   "required": ["conversation_id", "turns", "prediction_points"],
+L0005 |   "additionalProperties": false,
+L0006 |   "properties": {
+L0007 |     "conversation_id": {"type": "string", "pattern": "^val_conv_[0-9]{6}$"},
+L0008 |     "turns": {"$ref": "#/$defs/turns"},
+L0009 |     "prediction_points": {"type": "array", "items": {"$ref": "#/$defs/predictionPoint"}}
+L0010 |   },
+L0011 |   "$defs": {
+L0012 |     "turns": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["turn_id", "role", "content"], "additionalProperties": false, "properties": {"turn_id": {"type": "integer", "minimum": 1}, "role": {"enum": ["user", "assistant"]}, "content": {"type": "string", "minLength": 1}}}},
+L0013 |     "predictionPoint": {"type": "object", "required": ["target_user_turn_id", "assistant_response_turn_id", "target"], "additionalProperties": false, "properties": {"target_user_turn_id": {"type": "integer", "minimum": 1}, "assistant_response_turn_id": {"type": "integer", "minimum": 1}, "target": {"$ref": "#/$defs/target"}}},
+L0014 |     "target": {"type": "object", "required": ["response_text", "emotion_label", "user_profile", "memory_refs"], "additionalProperties": false, "properties": {"response_text": {"type": "string", "minLength": 1}, "emotion_label": {"$ref": "#/$defs/emotion"}, "user_profile": {"$ref": "#/$defs/profile"}, "memory_refs": {"type": "array", "items": {"type": "string", "pattern": "^mem_[0-9]{6}$"}, "uniqueItems": true}}},
+L0015 |     "emotion": {"enum": ["joy", "gratitude", "relaxed", "care", "pride", "neutral", "surprise", "mixed", "sadness", "loneliness", "anxiety", "anger", "fear", "disgust", "shame", "helplessness"]},
+L0016 |     "profile": {"type": "object", "required": ["personality_traits", "interests", "style"], "additionalProperties": false, "properties": {"personality_traits": {"type": "array", "items": {"enum": ["extroverted", "introverted", "open", "conservative", "high_conscientiousness", "casual", "agreeable", "assertive", "emotionally_stable", "sensitive"]}, "uniqueItems": true}, "interests": {"type": "array", "items": {"enum": ["study_exam", "programming_technology", "reading_writing", "film_animation", "music", "games", "sports_fitness", "travel_outdoor", "pets", "social", "career_development", "art_design"]}, "uniqueItems": true}, "style": {"type": "array", "items": {"enum": ["brief", "detailed", "colloquial", "formal", "direct", "indirect", "humorous", "rational", "high_emotional_expression", "low_emotional_expression", "emoji_user"]}, "uniqueItems": true}}}
+L0017 |   }
+L0018 | }
+===== END FILE: 训练-验证-数据集/val/val_public.schema.json =====
+
+
+===== FILE: test_inference_data.jsonl =====
+SHA256: 194f824a70fcc5a73e05e818eb0968045c165edc0cdf31e197d135103b910ebd
+L0001 | {"id":"test1_000001_t5","conversation_id":"test1_conv_000001","target_user_turn_id":5,"history":[{"turn_id":1,"role":"user","content":"最近面试碰壁有点多，今天刚面完一家，感觉脑子有点乱，想随便聊聊"},{"turn_id":2,"role":"assistant","content":"刚面完确实容易有一种“后劲”，脑子里像跑马灯一样回放刚才的问答，这时候脑子乱是很正常的生理反应。\n\n既然想随便聊聊，那我们就把“面试表现”先暂时搁置在一旁。你是想吐槽一下刚才面试里遇到的奇葩问题或面试官，还是只想聊点完全不相干的事情来换换脑子？"},{"turn_id":3,"role":"user","content":"吐槽吐槽，不然今晚估计都睡不踏实。其实流程还行，就是中间那个技术题，我本来准备了个PPT想照着念，结果电脑突然死机，我也没管，直接拿着手机备忘录就开始口述，虽然有点乱，但好歹把核心逻辑讲出来了。"},{"turn_id":4,"role":"assistant","content":"这简直是“计划赶不上变化”的教科书式现场！不过说实话，能在电脑死机这种突发状况下，不慌不忙地切到手机备忘录还能把核心逻辑讲清楚，这本身就是一个很强的加分项。\n\n很多面试官其实很看重候选人的**临场反应**和**抗压能力**。PPT是锦上添花，但能把逻辑理顺并清晰表达出来，才是硬通货。\n\n你是怎么稳住心态没当场崩溃的？是觉得“反正都这样了，硬着头皮上吧”，还是有什么别的心理建设？"},{"turn_id":5,"role":"user","content":"稳住心态倒谈不上，主要是怕啊。上一份工作就是被否得体无完肤，那种感觉太扎心了，所以我特别怕这次又是重蹈覆辙。现在脑子里全是“如果没过怎么办”，心一直悬着。你说我现在是该赶紧复盘刚才的漏洞，还是先别想太多，做点什么能让自己不那么紧绷？"}]}
+L0002 | {"id":"test1_000001_t7","conversation_id":"test1_conv_000001","target_user_turn_id":7,"history":[{"turn_id":1,"role":"user","content":"最近面试碰壁有点多，今天刚面完一家，感觉脑子有点乱，想随便聊聊"},{"turn_id":2,"role":"assistant","content":"刚面完确实容易有一种“后劲”，脑子里像跑马灯一样回放刚才的问答，这时候脑子乱是很正常的生理反应。\n\n既然想随便聊聊，那我们就把“面试表现”先暂时搁置在一旁。你是想吐槽一下刚才面试里遇到的奇葩问题或面试官，还是只想聊点完全不相干的事情来换换脑子？"},{"turn_id":3,"role":"user","content":"吐槽吐槽，不然今晚估计都睡不踏实。其实流程还行，就是中间那个技术题，我本来准备了个PPT想照着念，结果电脑突然死机，我也没管，直接拿着手机备忘录就开始口述，虽然有点乱，但好歹把核心逻辑讲出来了。"},{"turn_id":4,"role":"assistant","content":"这简直是“计划赶不上变化”的教科书式现场！不过说实话，能在电脑死机这种突发状况下，不慌不忙地切到手机备忘录还能把核心逻辑讲清楚，这本身就是一个很强的加分项。\n\n很多面试官其实很看重候选人的**临场反应**和**抗压能力**。PPT是锦上添花，但能把逻辑理顺并清晰表达出来，才是硬通货。\n\n你是怎么稳住心态没当场崩溃的？是觉得“反正都这样了，硬着头皮上吧”，还是有什么别的心理建设？"},{"turn_id":5,"role":"user","content":"稳住心态倒谈不上，主要是怕啊。上一份工作就是被否得体无完肤，那种感觉太扎心了，所以我特别怕这次又是重蹈覆辙。现在脑子里全是“如果没过怎么办”，心一直悬着。你说我现在是该赶紧复盘刚才的漏洞，还是先别想太多，做点什么能让自己不那么紧绷？"},{"turn_id":6,"role":"assistant","content":"这种“悬着”的感觉最耗神，因为大脑一直在模拟最坏的结果。鉴于你刚面完，且心里还带着上一份工作的“余震”，我的建议是：**先别急着复盘，先让大脑“断电”半小时。**\n\n原因很简单：刚结束面试时，你的情绪（焦虑、庆幸、后悔）是高度活跃的，这时候复盘很容易陷入“情绪化归因”，比如把一个小口误放大成“致命伤”，或者因为电脑死机而过度纠结细节。带着情绪做的复盘，往往不够客观，反而容易增加内耗。\n\n你可以试试这两个低门槛的动作，选一个顺眼的做：\n\n1.  **物理隔离法**：把手机（除了备忘录）扔到另一个房间，去洗个热水澡，或者单纯地发呆看窗外10分钟。让身体先放松，神经紧绷的时候，逻辑是容易乱掉的。\n2.  **快速“脑 dump”**：如果实在不写下来睡不着，拿张纸（不是手机屏幕），花5分钟快速记下刚才觉得“讲得好的3个点”和“卡壳的3个点”。写下来就代表“存盘”了，告诉大脑：“好了，证据已保留，明天再审判它。”\n\n你觉得哪种方式对你今晚来说更可行？或者，你更想先聊聊上一份工作那次“被否得体无完肤”的经历，看看它是不是在悄悄影响你现在的判断？"},{"turn_id":7,"role":"user","content":"洗个热水澡这个听着不错，挺放松的。不过既然你都问了，我也就直说了，上次离职就是因为领导总挑刺，搞得我特别怕被否定。这次面试虽然小失误不少，但我觉得也没必要死磕每个细节，毕竟人非圣贤嘛。你能不能给个具体的、马上能做的步骤？比如现在立刻去干点啥，好让我今晚能稍微踏实点？"}]}
+L0003 | {"id":"test1_000002_t5","conversation_id":"test1_conv_000002","target_user_turn_id":5,"history":[{"turn_id":1,"role":"user","content":"周末去拍了组晚霞。"},{"turn_id":2,"role":"assistant","content":"听起来很惬意。晚霞的色调和光影通常很有氛围感，是特意找了某个角度，还是偶遇的惊喜？"},{"turn_id":3,"role":"user","content":"随便拍拍而已。对了，回复简短点就好。"},{"turn_id":4,"role":"assistant","content":"好，收到。"},{"turn_id":5,"role":"user","content":"其实最近挺烦的，为了出片，爱好快变成任务了。"}]}
+===== END FILE: test_inference_data.jsonl =====
+
+
+===== DOCX 正文摘录（不包含内嵌截图） =====
+咪咕仝学平台实例创建demo V1.docx
+P1: 1.点击首页控制台
+P4: 2.点击AI算力实例
+P7: 3.点击创建实例
+P10: 4.选好算力规格后，选择 vLLM 公有镜像
+P13: 5.创建并开机，自行安装和更新镜像环境。
+P16: 6.进入到容器内
+P19: 7.将参考推理脚本拷贝到默认目录下。
+P22: 8.根据participant中readme文件说明，将训练好的模型上传到训推平台，并配置好模型路径，执行start.sh 推理脚本，获得推理结果。
+截图中的硬件示例不能当作正式比赛资源约定。

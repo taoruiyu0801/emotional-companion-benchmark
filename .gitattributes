@@ -1,0 +1,2 @@
+# Preserve the supplied source bytes; the shell script already uses LF.
+* -text

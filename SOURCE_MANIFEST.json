@@ -1,0 +1,81 @@
+{
+  "prepared_on": "2026-09-30",
+  "note": "Manifest covers original project files before Git publication; derived planning aids are excluded.",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1108,
+      "sha256": "d480ff4c38f4be8fd77fe0d4d1f639b4524cf321911d6be321e8fa19635d9712"
+    },
+    {
+      "path": "test_inference_data.jsonl",
+      "bytes": 6334,
+      "sha256": "194f824a70fcc5a73e05e818eb0968045c165edc0cdf31e197d135103b910ebd"
+    },
+    {
+      "path": "咪咕仝学平台实例创建demo V1.docx",
+      "bytes": 4226626,
+      "sha256": "308654ff2c0defb7a47e028be8e456bf53fcfef4fda0255952b8129d224dec5e"
+    },
+    {
+      "path": "任务调查报告_Benchmark_数据集_Scope与优化路线.md",
+      "bytes": 34757,
+      "sha256": "045a32acdfda4e7eeffaf6eec12757c54af9ee12b740f37e456e58ac04aafae7"
+    },
+    {
+      "path": "participant/configs/inference_config.json",
+      "bytes": 478,
+      "sha256": "bfc8fdc4f14d717c2ca06ecf4f84aa61405edc546237c2dead45a89be51b248a"
+    },
+    {
+      "path": "participant/README.md",
+      "bytes": 4279,
+      "sha256": "d0dd0df7e8cceb990aae2a79e3de94994c09c117a21709a99442e9c792a202c7"
+    },
+    {
+      "path": "participant/requirements.txt",
+      "bytes": 47,
+      "sha256": "f138a3692fc198597db34b45a50a3078a991bcc80a6a2afe8a3c0a2c534297a4"
+    },
+    {
+      "path": "participant/run_inference.py",
+      "bytes": 19467,
+      "sha256": "8d91ecffd58f7c9cd1c46696a74f73db648c88019ad30cd003d4b686d33dfaf9"
+    },
+    {
+      "path": "participant/start.sh",
+      "bytes": 4488,
+      "sha256": "f8ed932171974a8e99214efe5144982938475163a363fb421f2a84f2640e5ff4"
+    },
+    {
+      "path": "participant/templates/submission_schema.json",
+      "bytes": 1590,
+      "sha256": "91c42d56ae433212aab7905eabdbb96cf8463c2f887dc46b3f31647ab3a5d591"
+    },
+    {
+      "path": "participant/templates/submission_template.json",
+      "bytes": 219,
+      "sha256": "d6a630a114ffd91e83fab02deb22a1a7e2bd84266519f45bf775f48a47e31a3c"
+    },
+    {
+      "path": "训练-验证-数据集/train/train_public.jsonl",
+      "bytes": 69575005,
+      "sha256": "184a47471f8d6f70fa21b9265b0a4d4e51c3748ba25af39a801884a2da35341a"
+    },
+    {
+      "path": "训练-验证-数据集/train/train_public.schema.json",
+      "bytes": 2537,
+      "sha256": "a9467e520b06a96859acaa2ff022e395d08ff6ad5e8ae3532a22cc24c630cada"
+    },
+    {
+      "path": "训练-验证-数据集/val/val_public.jsonl",
+      "bytes": 6078596,
+      "sha256": "097c0639ef7370a18a54670ec3c8390ce5dc87c1ed95f436cef07b68dfed7668"
+    },
+    {
+      "path": "训练-验证-数据集/val/val_public.schema.json",
+      "bytes": 2535,
+      "sha256": "4b995d80aba99883bda63e2fa18b161a2784e501f98316295f4618b0a0c4af10"
+    }
+  ]
+}
